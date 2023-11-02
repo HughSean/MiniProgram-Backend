@@ -101,7 +101,7 @@ async fn login(
     .finish();
     let refresh_cookie = Cookie::build(
         "refresh_token",
-        refresh_token_details.token.unwrap_or_default(),
+        refresh_token_details.token.clone().unwrap_or_default(),
     )
     .path("/")
     .max_age(time::Duration::minutes(
@@ -123,7 +123,8 @@ async fn login(
         json!({
             "code": 0,
             "msg":"登录成功",
-            "access_token": access_token_details.token.unwrap()
+            "access_token":  access_token_details.token.unwrap(),
+            "refresh_token": refresh_token_details.token.unwrap(),
         })
         .to_string(),
     );
@@ -140,7 +141,7 @@ async fn login(
     //     header::SET_COOKIE,
     //     logged_in_cookie.to_string().parse().unwrap(),
     // );
-    
+
     debug!("give response");
     response.headers_mut().extend(headers);
     Ok(response)
