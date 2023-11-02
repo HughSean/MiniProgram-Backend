@@ -1,16 +1,12 @@
-[jwtcfg]
-jwt_secret = "my_ultra_secure_secret"
-jwt_expires_in = 30
-jwt_maxage = 60
-
 [servercfg]
 ip = "127.0.0.1"
 port = 8080
 db_url = "postgres://app_user:app_user@localhost/miniprogram"
 redis_url = "redis://127.0.0.1:6379/"
 
-[security]
-salt_string = "aW93ZXBxaGZ1aWd2YnJvZXl1dnF3ZmNxY2lyZW91Zmd2Ym95dXFlaXV3"
+[tokencfg]
+access_token_ttl = 1
+refresh_token_ttl = 2
 
 access_prikey = """
 -----BEGIN RSA PRIVATE KEY-----

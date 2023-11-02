@@ -1,6 +1,6 @@
 use crate::{api::register, appstate::AppState, utils::passwd};
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, sqlx::FromRow, Serialize, Clone)]
@@ -31,8 +31,8 @@ impl UserSchema {
         .await
         .map_err(|e| e.to_string())?
         .rows_affected();
-
-        warn!("in fn register_new_user, query rows_affected: {}", n);
+        debug!("register success");
+        info!("in fn register_new_user, query rows_affected: {}", n);
         Ok(())
     }
 }

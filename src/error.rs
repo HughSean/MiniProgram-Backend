@@ -8,6 +8,4 @@ pub type Result<T> = anyhow::Result<T, Error>;
 pub enum Error {
     CfgError(CfgError),
     DbError(String),
-    // Error(String),
-    SaltParseErr(String),
 }

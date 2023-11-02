@@ -16,8 +16,7 @@ impl Into<Error> for CfgError {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Cfg {
     pub servercfg: ServerCfg,
-    pub jwtcfg: JwtCfg,
-    pub security: Security,
+    pub tokencfg: TokenCfg,
 }
 
 pub async fn parse() -> Result<Cfg> {
@@ -41,17 +40,18 @@ pub struct ServerCfg {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct JwtCfg {
-    pub jwt_secret: String,
-    pub jwt_expires_in: i32,
-    pub jwt_maxage: i32,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct Security {
-    // pub salt_string: String,
+pub struct TokenCfg {
+    pub refresh_token_ttl: i64,
+    pub access_token_ttl: i64,
+    
     pub access_prikey: String,
     pub access_pubkey: String,
     pub refresh_prikey: String,
     pub refresh_pubkey: String,
 }
+
+// #[derive(Debug, Deserialize, Clone)]
+// pub struct Security {
+//     // pub salt_string: String,
+
+// }
