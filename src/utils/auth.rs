@@ -10,7 +10,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JWTAuthMiddleware {
@@ -23,7 +23,7 @@ pub enum AuthError {
     NoToken,
     InvalidToken,
     DBErr,
-    RedisErr(String),
+    // RedisErr(String),
     UuidParseErr,
     DeadToken,
 }
@@ -43,14 +43,6 @@ impl IntoResponse for AuthError {
             AuthError::DBErr => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"code":-1,"msg":  "数据库未查到此用户" })),
-            )
-                .into_response(),
-            AuthError::RedisErr(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "code":-1,
-                    "msg":format!("{}",err.to_string())
-                })),
             )
                 .into_response(),
             AuthError::UuidParseErr => (
@@ -73,7 +65,7 @@ pub async fn auth<B>(
     mut req: Request<B>,
     next: Next<B>,
 ) -> Result<impl IntoResponse, AuthError> {
-    debug!("get token");
+    debug!("提取token");
     //从cookie或者头部取得token
     let access_token = cookie_jar
         .get("access_token")
@@ -89,43 +81,42 @@ pub async fn auth<B>(
                     None
                 }
             }))
-        .ok_or(AuthError::NoToken)?;
+        .ok_or_else(|| {
+            warn!("未发现token");
+            AuthError::NoToken
+        })?;
 
-    debug!("verift token");
+    debug!("正在验证token");
     //校验token
     let tokendetils = token::jwt_token_verify(&access_token, &state.cfg.tokencfg.access_pubkey)
-        .or(Err(AuthError::InvalidToken))?;
+        .or_else(|err| {
+            warn!("token 验证错误: {}", err.to_string());
+            Err(AuthError::InvalidToken)
+        })?;
 
-    let mut redis_client = state
-        .redis_client
-        .get_async_connection()
-        .await
-        .or(Err(AuthError::RedisErr("redis 连接错误".to_string())))?;
-
-    debug!("query redis accesstoken");
-    //查询当前token的用户是否还在redis数据库中, 已验证会话是否过期
-    let redis_token_user_id = redis::AsyncCommands::get::<String, String>(
-        &mut redis_client,
-        tokendetils.token_uuid.clone().to_string(),
-    )
-    .await
-    .or(Err(AuthError::RedisErr("redis 查询错误，token已过期".to_string())))?;
-
-    let user_uuid = uuid::Uuid::parse_str(&redis_token_user_id).or(Err(AuthError::UuidParseErr))?;
+    debug!("查询用户({})信息", tokendetils.user_id.to_string());
     //查询用户数据库确定该用户是否存在
-    debug!("query postgreSQL user info");
-    let user = sqlx::query_as!(UserSchema, "select * from users where id =$1", user_uuid)
-        .fetch_optional(&state.pgpool)
-        .await
-        .or(Err(AuthError::DBErr))?
-        .ok_or_else(|| AuthError::DeadToken)?;
-    //token签名校验\redis会话校验\数据库用户校验, 全部完成用过认证, 为合法用户
-    debug!("pass");
+    let user = sqlx::query_as!(
+        UserSchema,
+        "select * from users where id =$1",
+        tokendetils.user_id
+    )
+    .fetch_optional(&state.pgpool)
+    .await
+    .or_else(|err| {
+        warn!("数据库查询错误: {}", err.to_string());
+        Err(AuthError::DBErr)
+    })?
+    .ok_or_else(|| {
+        warn!("token所属用户不存在");
+        AuthError::DeadToken
+    })?;
+    //token签名校验/数据库用户校验, 全部完成用过认证, 为合法用户
+    info!("用户({})身份验证通过", user.name);
     req.extensions_mut().insert(JWTAuthMiddleware {
         user,
         access_token_uuid: tokendetils.token_uuid,
     });
-
     Ok(next.run(req).await)
 }
 

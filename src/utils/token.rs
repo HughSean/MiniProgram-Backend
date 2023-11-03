@@ -1,8 +1,6 @@
-use crate::appstate::AppState;
-use axum::Json;
-use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{info, warn};
+// use redis::AsyncCommands;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenClaims {
@@ -45,13 +43,17 @@ pub fn jwt_token_gen(
     };
     //头部规定RS算法
     let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
-    debug!("token encoding");
     let token = jsonwebtoken::encode(
         &header,                                                           //头部
         &claims,                                                           //有效载荷
         &jsonwebtoken::EncodingKey::from_rsa_pem(private_key.as_bytes())?, //签名
-    )?;
+    )
+    .map_err(|err| {
+        warn!("token生成错误: {}", err.to_string());
+        err
+    })?;
     token_details.token = Some(token);
+    info!("token生成成功");
     Ok(token_details)
 }
 
@@ -59,7 +61,6 @@ pub fn jwt_token_verify(
     token: &str,
     public_key: &str,
 ) -> Result<TokenDetails, jsonwebtoken::errors::Error> {
-    debug!("token verifing");
     let validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
     let decoded: jsonwebtoken::TokenData<TokenClaims> = jsonwebtoken::decode(
         token,
@@ -67,48 +68,13 @@ pub fn jwt_token_verify(
         &validation,
     )?;
     let user_id = uuid::Uuid::parse_str(decoded.claims.sub.as_str()).unwrap();
+    info!("token检验通过");
     Ok(TokenDetails {
         token: None,
         token_uuid: decoded.claims.token_uuid,
         user_id,
         expires_in: None,
     })
-}
-
-pub async fn save_token_data_to_redis(
-    data: &AppState,
-    token_details: &TokenDetails,
-    ttl: i64,
-) -> Result<(), Json<serde_json::Value>> {
-    debug!("saving token to redis");
-    let mut redis_client = data
-        .redis_client
-        .get_async_connection()
-        .await
-        .map_err(|e| {
-            let error_response = serde_json::json!({
-                "code": -4,
-                "msg": format!("Redis error: {}", e),
-            });
-            Json(error_response)
-        })?;
-
-    //设置<token_uuid, user_id>
-    redis_client
-        .set_ex(
-            token_details.token_uuid.to_string(),
-            token_details.user_id.to_string(),
-            (ttl * 60) as usize,
-        )
-        .await
-        .map_err(|e| {
-            let error_response = serde_json::json!({
-                "code": -4,
-                "msg": format_args!("{}", e),
-            });
-            Json(error_response)
-        })?;
-    Ok(())
 }
 
 #[cfg(test)]

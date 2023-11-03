@@ -6,26 +6,34 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 anyhow = "1.0.75"
+# web
 axum = "0.6.20"
 axum-extra = { version = "0.8.0", features = ["cookie"] }
+tower = { version = "0.4.13", features = ["tokio"] }
+tower-http = { version = "0.4.4", features = ["auth", "uuid", "limit"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+# 日期处理库
 chrono = { version = "0.4.31", features = ["serde"] }
-jsonwebtoken = "9.1.0"
-pbkdf2 = { version = "0.12.2", features = ["password-hash", "simple"] }
-rand_core = { version = "0.6.4", features = ["std"] }
-redis = { version = "0.23.3", features = ["tokio-comp"] }
+time = "0.3.30"
+# serialize & deserialize
 serde = { version = "1.0.190", features = ["derive"] }
 serde_json = "1.0.107"
+# SQL
 sqlx = { version = "0.7.2", features = [
     "runtime-tokio",
     "postgres",
     "uuid",
     "chrono",
 ] }
-time = "0.3.30"
+# 异步运行时
 tokio = { version = "1.33.0", features = ["full"] }
+# toml文件解析
 toml = "0.8.4"
-tower = { version = "0.4.13", features = ["tokio"] }
-tower-http = { version = "0.4.4", features = ["auth", "uuid", "limit"] }
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+# 数据处理
+jsonwebtoken = "9.1.0"
+pbkdf2 = { version = "0.12.2", features = ["password-hash", "simple"] }
 uuid = { version = "1.5.0", features = ["v4", "serde"] }
+rand_core = { version = "0.6.4", features = ["std"] }
+# 邮箱验证
+# lettre = { version = "0.11.1", features = ["tokio1"] }

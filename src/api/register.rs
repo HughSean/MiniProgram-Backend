@@ -1,32 +1,31 @@
 use crate::appstate::AppState;
-use crate::module::user::UserSchema;
+use crate::module::user::{UserRegisterSchema, UserSchema};
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, info};
 
 pub fn router() -> Router<Arc<AppState>> {
+    info!("/register 挂载");
     Router::new().route("/register", post(register))
 }
 
 #[derive(Debug, Deserialize)]
 pub enum RegisterError {
-    UserNameClashErr,
-    InnerErr,
+    RequestErr(String),
+    ServerErr,
 }
 
 impl IntoResponse for RegisterError {
     fn into_response(self) -> Response {
         match self {
-            RegisterError::UserNameClashErr => (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"code":-1,"msg":"用户名已存在"})),
-            )
-                .into_response(),
-            RegisterError::InnerErr => (
+            RegisterError::RequestErr(err) => {
+                (StatusCode::BAD_REQUEST, Json(json!({"code":-1,"msg":&err}))).into_response()
+            }
+            RegisterError::ServerErr => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"code":-1,"msg":"服务器端错误，注册失败"})),
             )
@@ -35,33 +34,26 @@ impl IntoResponse for RegisterError {
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct RegisterSchema {
-    pub name: String,
-    pub pwd: String,
-    pub phone: String,
-    pub role: String,
-}
-
 async fn register(
     State(state): State<Arc<AppState>>,
-    Json(info): Json<RegisterSchema>,
+    Json(schema): Json<UserRegisterSchema>,
 ) -> Result<impl IntoResponse, RegisterError> {
-    debug!("query user from postgreSQL");
-    let query = sqlx::query_as!(UserSchema, "select * from users where name = $1", info.name)
-        .fetch_optional(&state.pgpool)
-        .await
-        .unwrap_or(None);
-
+    debug!("查询用户数据信息");
+    if (schema.role != "admin") && (schema.role != "user") {
+        return Err(RegisterError::RequestErr(
+            "role必须为'admin'或者'user'".to_string(),
+        ));
+    };
+    let query = UserSchema::fetch_optional_by_name(&schema.name, &state).await;
     if query.is_none() {
-        debug!("registering");
-        UserSchema::register_new_user(&state, info)
+        debug!("注册中");
+        UserSchema::register_new_user(&state, &schema)
             .await
-            .or(Err(RegisterError::InnerErr))?;
+            .or(Err(RegisterError::ServerErr))?;
     } else {
-        debug!("user name({}) exits", info.name);
-        return Err(RegisterError::UserNameClashErr);
+        debug!("用户({})已存在", schema.name);
+        return Err(RegisterError::RequestErr("用户已存在".to_string()));
     }
-    debug!("register success");
+    info!("注册成功");
     Ok(Json(json!({"code":0,"msg":"注册成功"})))
 }

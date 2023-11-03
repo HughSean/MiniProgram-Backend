@@ -5,7 +5,6 @@ mod cfg;
 mod error;
 mod module;
 mod utils;
-use crate::utils::auth;
 use axum::middleware;
 use axum::{http::StatusCode, response::IntoResponse, Router, Server};
 use std::sync::Arc;
@@ -21,37 +20,33 @@ async fn main() {
         .with(EnvFilter::try_from_default_env().unwrap_or("backend=debug".into()))
         .with(tracing_subscriber::fmt::layer())
         .init();
-    //设置关机信号
-    let (rx, cx) = tokio::sync::oneshot::channel();
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.unwrap();
-        rx.send(()).ok();
-    });
     //获取配置文件
     let cfg = cfg::parse().await.unwrap();
     let addrstr = format!("{}:{}", cfg.servercfg.ip, cfg.servercfg.port);
     let state = Arc::new(appstate::AppState::new(cfg).await.unwrap());
     //设置服务路由
-
-    let protected_api = Router::new()
-        .merge(api::logout::router())
-        .layer(middleware::from_fn_with_state(state.clone(), auth::auth));
+    let protected_api =
+    Router::new()
+    .merge(api::admin::router())
+    .layer(middleware::from_fn_with_state(
+        state.clone(),
+        utils::auth::auth,
+    ));
     let api = Router::new()
         .merge(api::login::router())
-        .merge(api::refresh_token::router())
         .merge(api::register::router());
-
     let approuter = Router::new()
         .nest("/api", api)
         .nest("/protected_api", protected_api)
         .with_state(state.clone())
+        .merge(api::pub_test::router(state.clone()))
         .fallback(fallback);
     //启动服务器
     info!("监听地址: {}", addrstr);
     Server::bind(&addrstr.parse().unwrap())
         .serve(approuter.into_make_service())
         .with_graceful_shutdown(async move {
-            cx.await.ok();
+            tokio::signal::ctrl_c().await.unwrap();
             warn!("收到关机信号，即将关机")
         })
         .await

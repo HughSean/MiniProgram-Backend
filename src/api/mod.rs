@@ -1,4 +1,4 @@
+pub mod admin;
 pub mod login;
-pub mod logout;
-pub mod refresh_token;
+pub mod pub_test;
 pub mod register;
