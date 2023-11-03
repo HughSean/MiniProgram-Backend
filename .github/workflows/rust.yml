@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: prepare
+    - run: docker compose restart -f
     - name: Build
       run: cargo build --verbose
     - name: Run tests
