@@ -1,4 +1,4 @@
-use crate::{cfg::Cfg, error::Error};
+use crate::cfg::Cfg;
 use sqlx::{Pool, Postgres};
 use tracing::info;
 
@@ -11,23 +11,18 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new(cfg: Cfg) -> crate::error::Result<Self> {
-        // let redis_url = cfg.servercfg.redis_url.clone();
-        // let salt_string = cfg.security.salt_string.clone();
-
+    pub async fn new(cfg: Cfg) -> crate::App::Result<Self> {
         Ok(Self {
-            // redis_client: redis::Client::open(redis_url)
-            //     .map_err(|err| Error::DbError(err.to_string()))?,
             pgpool: sqlx::postgres::PgPoolOptions::new()
                 .max_connections(5)
                 .connect(&cfg.servercfg.db_url)
                 .await
-                .map_err(|err| Error::DbError(err.to_string()))?,
+                .and_then(|ok| {
+                    info!("建立起和数据库的连接池");
+                    Ok(ok)
+                })
+                .map_err(|err| anyhow::anyhow!(err.to_string()))?,
             cfg,
-        })
-        .and_then(|s| {
-            info!("程序状态创建完成");
-            Ok(s)
         })
     }
 }

@@ -1,9 +1,8 @@
-use crate::cfg::CfgError;
+use axum::{http::StatusCode, BoxError};
 
-pub type Result<T> = core::result::Result<T, Error>;
-
-#[derive(Debug)]
-pub enum Error {
-    CfgError(CfgError),
-    DbError(String),
+async fn error_handler(err: BoxError) -> (StatusCode, String) {
+    match err.downcast_ref::<crate::api::error::HandlerErr>().unwrap() {
+        crate::api::error::HandlerErr::BadRequest(_) => todo!(),
+        crate::api::error::HandlerErr::ServerInnerErr => todo!(),
+    }
 }

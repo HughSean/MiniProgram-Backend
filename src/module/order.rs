@@ -11,3 +11,13 @@ pub struct OrderSchema {
     pub apt_end: chrono::NaiveDateTime,
     pub remark: String,
 }
+
+#[derive(Debug, Deserialize, sqlx::FromRow, Serialize, Clone)]
+pub struct GetOrderSchema {
+    pub id: Uuid,
+    pub user_name: String,
+    pub court_name: String,
+    pub order_time: chrono::NaiveDateTime,
+    pub apt_start: chrono::NaiveDateTime,
+    pub remark: String,
+}

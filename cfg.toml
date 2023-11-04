@@ -1,7 +1,7 @@
 [servercfg]
 ip = "127.0.0.1"
 port = 8080
-db_url = "postgres://app_user:app_user@localhost/miniprogram"
+db_url = "postgres://miniprogram:passwd@localhost/miniprogram"
 
 [tokencfg]
 access_token_ttl = 20

@@ -44,7 +44,6 @@ impl UserSchema {
         .await
         .map_err(|e| e.to_string())?
         .rows_affected();
-        info!("用户({})注册成功", schema.name);
         Ok(())
     }
 

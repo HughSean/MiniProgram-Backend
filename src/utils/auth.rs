@@ -1,14 +1,13 @@
-use super::token;
+use super::{error::BaseError, token};
 use crate::{appstate::AppState, module::user::UserSchema};
 use axum::{
     extract::State,
-    http::{header, Request, StatusCode},
+    http::{header, Request},
     middleware::Next,
-    response::{IntoResponse, Response},
-    Json,
+    response::IntoResponse,
+    Extension,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -18,53 +17,12 @@ pub struct JWTAuthMiddleware {
     pub access_token_uuid: uuid::Uuid,
 }
 
-#[derive(Debug, Deserialize)]
-pub enum AuthError {
-    NoToken,
-    InvalidToken,
-    DBErr,
-    // RedisErr(String),
-    UuidParseErr,
-    DeadToken,
-}
-impl IntoResponse for AuthError {
-    fn into_response(self) -> Response {
-        match self {
-            AuthError::NoToken => (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"code":-1,"msg": "请提供token" })),
-            )
-                .into_response(),
-            AuthError::InvalidToken => (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"code":-1,"msg": "无效token"})),
-            )
-                .into_response(),
-            AuthError::DBErr => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"code":-1,"msg":  "数据库未查到此用户" })),
-            )
-                .into_response(),
-            AuthError::UuidParseErr => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"code":-1,"msg": "uuid 解析错误" })),
-            )
-                .into_response(),
-            AuthError::DeadToken => (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"code":-1,"msg": "此token无效" })),
-            )
-                .into_response(),
-        }
-    }
-}
-
 pub async fn auth<B>(
     cookie_jar: axum_extra::extract::CookieJar,
     State(state): State<Arc<AppState>>,
     mut req: Request<B>,
     next: Next<B>,
-) -> Result<impl IntoResponse, AuthError> {
+) -> Result<impl IntoResponse, BaseError<&'static str>> {
     debug!("提取token");
     //从cookie或者头部取得token
     let access_token = cookie_jar
@@ -83,7 +41,7 @@ pub async fn auth<B>(
             }))
         .ok_or_else(|| {
             warn!("未发现token");
-            AuthError::NoToken
+            BaseError::BadRequest(-1, "需要koen")
         })?;
 
     debug!("正在验证token");
@@ -91,7 +49,7 @@ pub async fn auth<B>(
     let tokendetils = token::jwt_token_verify(&access_token, &state.cfg.tokencfg.access_pubkey)
         .or_else(|err| {
             warn!("token 验证错误: {}", err.to_string());
-            Err(AuthError::InvalidToken)
+            Err(BaseError::BadRequest(-1, "无效token"))
         })?;
 
     debug!("查询用户({})信息", tokendetils.user_id.to_string());
@@ -105,11 +63,11 @@ pub async fn auth<B>(
     .await
     .or_else(|err| {
         warn!("数据库查询错误: {}", err.to_string());
-        Err(AuthError::DBErr)
+        Err(BaseError::ServerInnerErr)
     })?
     .ok_or_else(|| {
         warn!("token所属用户不存在");
-        AuthError::DeadToken
+        BaseError::BadRequest(-1, "用户不存在")
     })?;
     //token签名校验/数据库用户校验, 全部完成用过认证, 为合法用户
     info!("用户({})身份验证通过", user.name);
@@ -118,6 +76,19 @@ pub async fn auth<B>(
         access_token_uuid: tokendetils.token_uuid,
     });
     Ok(next.run(req).await)
+}
+
+pub async fn admin_auth<B>(
+    Extension(jwt_guard): Extension<JWTAuthMiddleware>,
+    req: Request<B>,
+    next: Next<B>,
+) -> Result<impl IntoResponse, BaseError<&'static str>> {
+    if jwt_guard.user.role == "admin" {
+        Ok(next.run(req).await)
+    } else {
+        warn!("用户({})被拒绝访问/admin", jwt_guard.user.name);
+        Err(BaseError::BadRequest(-1, "非管理员用户, 禁止通行"))
+    }
 }
 
 mod test {

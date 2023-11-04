@@ -1,3 +1,4 @@
 /target
 .idea
-/data
+pg-data
+data
