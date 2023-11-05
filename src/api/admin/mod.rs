@@ -7,10 +7,8 @@ use tracing::info;
 
 pub fn router() -> Router<Arc<AppState>> {
     info!("/admin/* 挂载中");
-    let court = Router::new().nest("/court", court::router());
 
-    let router = Router::new().merge(court);
     Router::new()
-        .nest("/admin", router)
+        .nest("/court", court::router())
         .layer(middleware::from_fn(crate::utils::auth::admin_auth))
 }

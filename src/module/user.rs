@@ -1,14 +1,27 @@
-use crate::{appstate::AppState, utils::passwd};
+use super::db::{self, prelude::Users};
+use crate::{
+    appstate::AppState,
+    utils::{error::BaseError, passwd},
+};
+use sea_orm::{EntityTrait, Set};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::error;
 use uuid::Uuid;
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct UserSchema {
+    pub user_id: Uuid,
+    pub name: String,
+    pub pwd: String,
+    pub phone: String,
+    pub is_admin: bool,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct UserRegisterSchema {
     pub name: String,
     pub pwd: String,
     pub phone: String,
-    pub role: String,
+    pub is_admin: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -17,40 +30,28 @@ pub struct UserLoginSchema {
     pub pwd: String,
 }
 
-#[derive(Debug, Deserialize, sqlx::FromRow, Serialize, Clone)]
-pub struct UserSchema {
-    pub id: Uuid,
-    pub name: String,
-    pub pwd: String,
-    pub phone: String,
-    pub role: String,
-    pub create_time: chrono::NaiveDateTime,
-}
-
-impl UserSchema {
-    pub async fn register_new_user(
+pub struct UserOP;
+impl UserOP {
+    pub async fn register_new_user<T>(
+        schema: UserRegisterSchema,
         state: &AppState,
-        schema: &UserRegisterSchema,
-    ) -> Result<(), String> {
+    ) -> Result<Uuid, BaseError<T>> {
         let password_hash = passwd::passwd_encode(&schema.pwd)?;
-        let _n = sqlx::query!(
-            "insert into users (name, pwd, phone, role) values ($1, $2, $3, $4);",
-            schema.name,
-            password_hash,
-            schema.phone,
-            schema.role
-        )
-        .execute(&state.pgpool)
+        let id = Users::insert(db::users::ActiveModel {
+            user_name: Set(schema.name),
+            user_pwd: Set(password_hash),
+            phone: Set(schema.phone),
+            is_admin: Set(schema.is_admin),
+            ..Default::default()
+        })
+        .exec(&state.db)
         .await
-        .map_err(|e| e.to_string())?
-        .rows_affected();
-        Ok(())
-    }
-
-    pub async fn fetch_optional_by_name(name: &str, state: &AppState) -> Option<UserSchema> {
-        sqlx::query_as!(UserSchema, "select * from users where name = $1", name)
-            .fetch_optional(&state.pgpool)
-            .await
-            .unwrap_or(None)
+        .map_err(|err| {
+            let id = Uuid::new_v4();
+            error!("{} >>>> {}", id, err.to_string());
+            BaseError::ServerInnerErr(id)
+        })?
+        .last_insert_id;
+        Ok(id)
     }
 }

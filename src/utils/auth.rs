@@ -1,5 +1,8 @@
 use super::{error::BaseError, token};
-use crate::{appstate::AppState, module::user::UserSchema};
+use crate::{
+    appstate::AppState,
+    module::{db::prelude::Users, user::UserSchema},
+};
 use axum::{
     extract::State,
     http::{header, Request},
@@ -7,9 +10,11 @@ use axum::{
     response::IntoResponse,
     Extension,
 };
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JWTAuthMiddleware {
@@ -54,21 +59,27 @@ pub async fn auth<B>(
 
     debug!("查询用户({})信息", tokendetils.user_id.to_string());
     //查询用户数据库确定该用户是否存在
-    let user = sqlx::query_as!(
-        UserSchema,
-        "select * from users where id =$1",
-        tokendetils.user_id
-    )
-    .fetch_optional(&state.pgpool)
-    .await
-    .or_else(|err| {
-        warn!("数据库查询错误: {}", err.to_string());
-        Err(BaseError::ServerInnerErr)
-    })?
-    .ok_or_else(|| {
-        warn!("token所属用户不存在");
-        BaseError::BadRequest(-1, "用户不存在")
-    })?;
+    let id = Uuid::new_v4();
+    let user = Users::find()
+        .filter(crate::module::db::users::Column::UserId.eq(tokendetils.user_id))
+        .one(&state.db)
+        .await
+        .map_err(|err| {
+            error!("id({}): {}", id, err.to_string());
+            BaseError::ServerInnerErr(id)
+        })?
+        .ok_or_else(|| {
+            warn!("token所属用户不存在");
+            BaseError::BadRequest(-1, "用户不存在")
+        })?;
+
+    let user = UserSchema {
+        user_id: user.user_id,
+        name: user.user_name,
+        pwd: user.user_pwd,
+        phone: user.phone,
+        is_admin: user.is_admin,
+    };
     //token签名校验/数据库用户校验, 全部完成用过认证, 为合法用户
     info!("用户({})身份验证通过", user.name);
     req.extensions_mut().insert(JWTAuthMiddleware {
@@ -79,15 +90,15 @@ pub async fn auth<B>(
 }
 
 pub async fn admin_auth<B>(
-    Extension(jwt_guard): Extension<JWTAuthMiddleware>,
+    Extension(auth): Extension<JWTAuthMiddleware>,
     req: Request<B>,
     next: Next<B>,
 ) -> Result<impl IntoResponse, BaseError<&'static str>> {
-    if jwt_guard.user.role == "admin" {
+    if auth.user.is_admin {
         Ok(next.run(req).await)
     } else {
-        warn!("用户({})被拒绝访问/admin", jwt_guard.user.name);
-        Err(BaseError::BadRequest(-1, "非管理员用户, 禁止通行"))
+        warn!("用户({})被拒绝访问 /admin/*", auth.user.name);
+        Err(BaseError::BadRequest(-1, "权限不足"))
     }
 }
 

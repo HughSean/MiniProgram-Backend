@@ -1,35 +1,42 @@
 create extension if not exists "uuid-ossp";
 create table if not exists "users"
 (
-    id          uuid                        not null default uuid_generate_v4() primary key,
-    name        varchar(100)                not null unique,
-    pwd         varchar(100)                not null,
-    phone       varchar(20)                 not null unique,
-    role        varchar(20)                 not null default 'user',
-    create_time timestamp without time zone not null default now()
+    user_id   uuid        not null default uuid_generate_v4() primary key,
+    user_name varchar(30) not null unique,
+    user_pwd  varchar     not null,
+    phone     varchar(20) not null unique,
+    --是否为球场管理员
+    is_admin  bool        not null
 );
+
 -----------------------------------------------
 create table if not exists "courts"
 (
-    id       uuid         not null default uuid_generate_v4() primary key,
-    admin    uuid         not null references users (id),
-    name     varchar(100) not null,
-    location varchar(200) not null,
-    class    varchar(20)  not null,
-    unique (admin, name)
+    court_id   uuid        not null default uuid_generate_v4() primary key,
+    admin_id   uuid        not null references users (user_id),
+    --球场名称
+    court_name varchar(50) not null,
+    --球场标签
+    label      varchar(30) not null,
+    --球场位置
+    location   varchar     not null,
+    unique (admin_id, court_name)
 );
-create index on courts (admin, name);
+create index on courts (admin_id, court_id);
 -----------------------------------------------
 create table if not exists "orders"
 (
-    id        serial primary key          not null,
-    userid    uuid references users (id)  not null,
-    courtid   uuid references courts (id) not null,
-    ordertime timestamp without time zone not null default now(),
-    apt_start timestamp without time zone not null,
-    apt_end   timestamp without time zone not null,
-    remark    varchar(300),--备注
-    check ( apt_start < orders.apt_end )
+    order_id    uuid primary key                  not null default uuid_generate_v4(),
+    user_id     uuid references users (user_id)   not null,
+    court_id    uuid references courts (court_id) not null,
+    --订单发出时间
+    create_time timestamp without time zone       not null default now(),
+    --订单开始时间
+    apt_start   timestamp without time zone       not null,
+    --订单结束时间
+    apt_end     timestamp without time zone       not null,
+    check ( create_time < apt_start ),
+    check ( apt_start < apt_end )
 );
-create index on orders (userid);
-create index on orders (courtid);
+create index on orders (user_id);
+create index on orders (court_id);

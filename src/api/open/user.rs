@@ -1,16 +1,19 @@
-use crate::appstate::AppState;
-use crate::module::user::{UserLoginSchema, UserRegisterSchema, UserSchema};
+use crate::module::db;
+use crate::module::user::{UserLoginSchema, UserOP, UserRegisterSchema};
 use crate::utils::error::BaseError;
 use crate::utils::{passwd, token};
+use crate::{appstate::AppState, module::db::prelude::Users};
 use axum::extract::State;
 use axum::http::{header, HeaderMap};
 use axum::response::{IntoResponse, Response};
 use axum::{routing::post, Json, Router};
 use axum_extra::extract::cookie::{Cookie, SameSite};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::info;
 use tracing::{debug, warn};
+use tracing::{error, info};
+use uuid::Uuid;
 
 pub fn router() -> Router<Arc<AppState>> {
     info!("/login 挂载中");
@@ -26,24 +29,30 @@ async fn login(
 ) -> Result<impl IntoResponse, BaseError<&'static str>> {
     //先根据用户名查询用户信息
     debug!("查询用户信息");
-    let user_schema = UserSchema::fetch_optional_by_name(&schema.name, &state)
+    let user_schema = Users::find()
+        .filter(db::users::Column::UserName.eq(&schema.name))
+        .one(&state.db)
         .await
-        .ok_or_else(|| {
-            warn!("用户不存在");
-            BaseError::BadRequest(-1, "用户不存在")
-        })?;
-
+        .map_err(|err| {
+            let id = Uuid::new_v4();
+            error!("{} >>>> {}", id, err.to_string());
+            BaseError::ServerInnerErr(id)
+        })?
+        .ok_or(BaseError::BadRequest(-1, "用户不存在"))?;
     debug!("校验密码");
-    passwd::passwd_verify(&schema.pwd, &user_schema.pwd)
-        .or(Err(BaseError::BadRequest(-1, "密码错误")))?;
+    passwd::passwd_verify(&schema.pwd, &user_schema.user_pwd)?;
     //生成access_token
     debug!("生成token");
     let access_token_details = token::jwt_token_gen(
-        user_schema.id,
+        user_schema.user_id,
         state.cfg.tokencfg.access_token_ttl,
         &state.cfg.tokencfg.access_prikey,
     )
-    .or(Err(BaseError::ServerInnerErr))?;
+    .map_err(|err| {
+        let id = Uuid::new_v4();
+        error!("{} >>>> {}", id, err.to_string());
+        BaseError::ServerInnerErr(id)
+    })?;
 
     //设置cookie
     let access_cookie = Cookie::build(
@@ -83,20 +92,29 @@ async fn register(
     Json(schema): Json<UserRegisterSchema>,
 ) -> Result<impl IntoResponse, BaseError<&'static str>> {
     debug!("查询用户数据信息");
-    if (schema.role != "admin") && (schema.role != "user") {
-        return Err(BaseError::BadRequest(-1, "role必须为'admin'或者'user'"));
-    };
-
-    let query = UserSchema::fetch_optional_by_name(&schema.name, &state).await;
-    if query.is_none() {
-        debug!("注册中");
-        UserSchema::register_new_user(&state, &schema)
-            .await
-            .or(Err(BaseError::ServerInnerErr))?;
-    } else {
-        debug!("用户({})已存在", schema.name);
-        return Err(BaseError::BadRequest(-1, "用户已存在"));
+    let user = Users::find()
+        .filter(
+            crate::module::db::users::Column::UserName
+                .eq(&schema.name)
+                .or(crate::module::db::users::Column::Phone.eq(&schema.phone)),
+        )
+        .one(&state.db)
+        .await
+        .map_err(|err| {
+            let id = Uuid::new_v4();
+            error!("{} >>>> {}", id, err.to_string());
+            BaseError::ServerInnerErr(id)
+        })?;
+    if user.is_some() {
+        warn!(
+            "注册失败: 用户名({})已存在, 或者号码({})已存在",
+            schema.name, schema.phone
+        );
+        return Err(BaseError::BadRequest(-1, "用户名已存在, 或者号码已存在"));
     }
-    info!("用户({})注册成功", schema.name);
+
+    debug!("注册中");
+    let name = UserOP::register_new_user(schema, &state).await?;
+    info!("用户({})注册成功", name);
     Ok(Json(json!({"code":0,"msg":"注册成功"})))
 }

@@ -19,9 +19,6 @@ pub struct TokenDetails {
     pub expires_in: Option<i64>, //过期时间戳
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-enum TokenError {}
-
 pub fn jwt_token_gen(
     user_id: uuid::Uuid,
     ttl: i64,
