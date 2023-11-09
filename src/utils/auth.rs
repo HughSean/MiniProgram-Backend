@@ -19,7 +19,7 @@ use uuid::Uuid;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JWTAuthMiddleware {
     pub user: UserSchema,
-    pub access_token_uuid: uuid::Uuid,
+    // pub access_token_uuid: uuid::Uuid,
 }
 
 pub async fn auth<B>(
@@ -32,36 +32,30 @@ pub async fn auth<B>(
     //从cookie或者头部取得token
     let access_token = cookie_jar
         .get("access_token")
-        .and_then(|e| Some(e.value().to_string()))
+        .map(|e| e.value().to_string())
         .or(req
             .headers()
             .get(header::AUTHORIZATION)
             .and_then(|e| e.to_str().ok())
-            .and_then(|auth_value| {
-                if auth_value.starts_with("Bearer ") {
-                    Some(auth_value[7..].to_owned())
-                } else {
-                    None
-                }
-            }))
+            .and_then(|auth_value| auth_value.strip_prefix("Bearer ").map(|e| e.to_string())))
         .ok_or_else(|| {
             warn!("未发现token");
-            BaseError::BadRequest(-1, "需要koen")
+            BaseError::BadRequest(401, "需要koen")
         })?;
 
     debug!("正在验证token");
     //校验token
-    let tokendetils = token::jwt_token_verify(&access_token, &state.cfg.tokencfg.access_pubkey)
-        .or_else(|err| {
+    let user_id =
+        token::verify(&access_token, &state.cfg.tokencfg.access_pubkey).map_err(|err| {
             warn!("token 验证错误: {}", err.to_string());
-            Err(BaseError::BadRequest(-1, "无效token"))
+            BaseError::BadRequest(401, "无效token")
         })?;
 
-    debug!("查询用户({})信息", tokendetils.user_id.to_string());
+    debug!("查询用户({})信息", user_id.to_string());
     //查询用户数据库确定该用户是否存在
     let id = Uuid::new_v4();
     let user = Users::find()
-        .filter(crate::module::db::users::Column::UserId.eq(tokendetils.user_id))
+        .filter(crate::module::db::users::Column::UserId.eq(user_id))
         .one(&state.db)
         .await
         .map_err(|err| {
@@ -70,22 +64,19 @@ pub async fn auth<B>(
         })?
         .ok_or_else(|| {
             warn!("token所属用户不存在");
-            BaseError::BadRequest(-1, "用户不存在")
+            BaseError::BadRequest(401, "用户不存在")
         })?;
 
     let user = UserSchema {
         user_id: user.user_id,
-        name: user.user_name,
-        pwd: user.user_pwd,
+        user_name: user.user_name,
+        // pwd: user.user_pwd,
         phone: user.phone,
         is_admin: user.is_admin,
     };
     //token签名校验/数据库用户校验, 全部完成用过认证, 为合法用户
-    info!("用户({})身份验证通过", user.name);
-    req.extensions_mut().insert(JWTAuthMiddleware {
-        user,
-        access_token_uuid: tokendetils.token_uuid,
-    });
+    info!("用户({})身份验证通过", user.user_name);
+    req.extensions_mut().insert(JWTAuthMiddleware { user });
     Ok(next.run(req).await)
 }
 
@@ -97,18 +88,7 @@ pub async fn admin_auth<B>(
     if auth.user.is_admin {
         Ok(next.run(req).await)
     } else {
-        warn!("用户({})被拒绝访问 /admin/*", auth.user.name);
-        Err(BaseError::BadRequest(-1, "权限不足"))
-    }
-}
-
-mod test {
-
-    #[test]
-    fn f() {
-        let e = axum_extra::extract::CookieJar::new()
-            .get("name")
-            .and_then(|e| Some(e.to_string()));
-        println!("{e:?}")
+        warn!("用户({})被拒绝访问 /admin/*", auth.user.user_name);
+        Err(BaseError::BadRequest(401, "权限不足"))
     }
 }

@@ -10,5 +10,6 @@ pub fn router() -> Router<Arc<AppState>> {
 
     Router::new()
         .nest("/court", court::router())
+        .nest("/order", order::router())
         .layer(middleware::from_fn(crate::utils::auth::admin_auth))
 }

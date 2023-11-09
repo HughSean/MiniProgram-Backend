@@ -5,7 +5,7 @@ use uuid::Uuid;
 use super::error::BaseError;
 
 //密码散列
-pub fn passwd_encode<T>(pwd: &str) -> Result<String, BaseError<T>> {
+pub fn hash_password<T>(pwd: &str) -> Result<String, BaseError<T>> {
     let salt = SaltString::generate(&mut rand_core::OsRng);
     let password = pwd.as_bytes();
     let password_hash =
@@ -20,7 +20,7 @@ pub fn passwd_encode<T>(pwd: &str) -> Result<String, BaseError<T>> {
     Ok(password_hash)
 }
 //密码校验
-pub fn passwd_verify(pwd: &str, password_hash: &str) -> Result<(), BaseError<&'static str>> {
+pub fn verify_password(pwd: &str, password_hash: &str) -> Result<(), BaseError<&'static str>> {
     let parsed_hash = pbkdf2::password_hash::PasswordHash::new(password_hash).map_err(|err| {
         let id = Uuid::new_v4();
         error!("{} >>>> {}", id, err.to_string());

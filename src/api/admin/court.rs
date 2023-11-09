@@ -2,6 +2,7 @@ use crate::{
     appstate::AppState,
     module::court::{AddCourt, CourtOp, DelCourt, SaveCourt},
     module::{
+        court::{CourtSchema, UpdateCourt},
         db,
         db::prelude::{self, Courts},
     },
@@ -14,7 +15,7 @@ use axum::{
     Extension, Json, Router,
 };
 use prelude::Orders;
-use sea_orm::{ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait, Set};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde_json::json;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -47,23 +48,28 @@ async fn add(
             error!("{} >>>> {}", id, err.to_string());
             BaseError::ServerInnerErr::<String>(id)
         })?
-        .map_or(
-            Err(BaseError::BadRequest(-1, "球场不存在".to_string())),
-            |_| Ok(()),
-        )?;
-    let id = CourtOp::save::<String>(
+        .map_or(Ok(()), |_| {
+            Err(BaseError::BadRequest(-1, "球场名重复".to_string()))
+        })?;
+    let court = CourtOp::save::<String>(
         SaveCourt {
             court_id: None,
+            admin_id: auth.user.user_id,
             court_name: schema.court_name.clone(),
             location: schema.location,
             label: schema.label,
+            price_per_hour: schema.price_per_hour,
         },
         &state,
     )
     .await?;
 
-    info!("admin({})添加球场({})", auth.user.name, schema.court_name);
-    Ok(Json(json!({"code":0,"msg":"球场添加成功","court_id":id})))
+    info!("admin({})添加球场({})", auth.user.user_name, schema.court_name);
+    Ok(Json(json!({
+        "code":0,
+        "msg":"球场添加成功",
+        "data":{"court":court}
+    })))
 }
 
 async fn del(
@@ -73,9 +79,11 @@ async fn del(
 ) -> Result<impl IntoResponse, BaseError<String>> {
     let now = chrono::Utc::now().naive_utc();
     Orders::find()
-        .filter(db::orders::Column::CourtId.eq(schema.court_id))
-        .join(JoinType::InnerJoin, db::courts::Relation::Orders.def())
-        .filter(db::orders::Column::AptEnd.gte(now))
+        .filter(
+            db::orders::Column::CourtId
+                .eq(schema.court_id)
+                .and(db::orders::Column::AptEnd.gte(now)),
+        )
         .one(&state.db)
         .await
         .map_err(|err| {
@@ -107,7 +115,7 @@ async fn del(
             format!("没有球场({})", schema.court_id).to_string(),
         ))
     } else {
-        info!("admin({})删除球场({})", auth.user.name, schema.court_id);
+        info!("admin({})删除球场({})", auth.user.user_name, schema.court_id);
         Ok(Json(json!({"code":0,"msg":"球场删除成功"})))
     }
 }
@@ -126,24 +134,26 @@ async fn all(
             BaseError::ServerInnerErr::<String>(id)
         })?
         .into_iter()
-        .map(|e| SaveCourt {
+        .map(|e| CourtSchema {
             court_id: Some(e.court_id),
+            admin_id: auth.user.user_id,
             court_name: e.court_name,
             location: e.location,
             label: e.label,
+            price_per_hour: e.price_per_hour,
         })
         .collect();
     Ok(Json(json!({
         "code":0,
         "msg":"查询成功",
-        "data":courts
+        "data":{"court":courts}
     })))
 }
 
 async fn update(
     Extension(auth): Extension<JWTAuthMiddleware>,
     State(state): State<Arc<AppState>>,
-    Json(schema): Json<SaveCourt>,
+    Json(schema): Json<UpdateCourt>,
 ) -> Result<impl IntoResponse, BaseError<String>> {
     Courts::find()
         .filter(
@@ -159,9 +169,21 @@ async fn update(
             BaseError::ServerInnerErr::<String>(id)
         })?
         .ok_or(BaseError::BadRequest(-1, "球场不存在".to_string()))?;
-    CourtOp::save::<String>(schema, &state).await?;
+    let court = CourtOp::save::<String>(
+        SaveCourt {
+            court_id: Some(schema.court_id),
+            admin_id: auth.user.user_id,
+            court_name: schema.court_name,
+            location: schema.location,
+            label: schema.label,
+            price_per_hour: schema.price_per_hour,
+        },
+        &state,
+    )
+    .await?;
     Ok(Json(json!({
         "code":0,
         "msg":"操作成功",
+        "data":{"court": court}
     })))
 }

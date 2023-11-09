@@ -11,30 +11,25 @@ pub struct TokenClaims {
     pub nbf: i64,               //生效时间
 }
 
+#[deprecated]
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TokenDetails {
+pub struct TokenWrap {
     pub token: Option<String>,   //TokenClaims的JWT
     pub token_uuid: uuid::Uuid,  //token的uuid
     pub user_id: uuid::Uuid,     //token所属用户的uuid
     pub expires_in: Option<i64>, //过期时间戳
 }
 
-pub fn jwt_token_gen(
+pub fn create(
     user_id: uuid::Uuid,
     ttl: i64,
     private_key: &str,
-) -> Result<TokenDetails, jsonwebtoken::errors::Error> {
+) -> Result<String, jsonwebtoken::errors::Error> {
     let now = chrono::Utc::now();
-    let mut token_details = TokenDetails {
-        token: None,
-        token_uuid: uuid::Uuid::new_v4(),
-        user_id,
-        expires_in: Some((now + chrono::Duration::minutes(ttl)).timestamp()),
-    };
     let claims = TokenClaims {
-        sub: token_details.user_id.to_string(),
-        token_uuid: token_details.token_uuid,
-        exp: token_details.expires_in.unwrap(),
+        sub: user_id.to_string(),
+        token_uuid: uuid::Uuid::new_v4(),
+        exp: (now + chrono::Duration::minutes(ttl)).timestamp(),
         iat: now.timestamp(),
         nbf: now.timestamp(),
     };
@@ -49,15 +44,11 @@ pub fn jwt_token_gen(
         warn!("token生成错误: {}", err.to_string());
         err
     })?;
-    token_details.token = Some(token);
     info!("token生成成功");
-    Ok(token_details)
+    Ok(token)
 }
 
-pub fn jwt_token_verify(
-    token: &str,
-    public_key: &str,
-) -> Result<TokenDetails, jsonwebtoken::errors::Error> {
+pub fn verify(token: &str, public_key: &str) -> Result<uuid::Uuid, jsonwebtoken::errors::Error> {
     let validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
     let decoded: jsonwebtoken::TokenData<TokenClaims> = jsonwebtoken::decode(
         token,
@@ -66,17 +57,5 @@ pub fn jwt_token_verify(
     )?;
     let user_id = uuid::Uuid::parse_str(decoded.claims.sub.as_str()).unwrap();
     info!("token检验通过");
-    Ok(TokenDetails {
-        token: None,
-        token_uuid: decoded.claims.token_uuid,
-        user_id,
-        expires_in: None,
-    })
-}
-
-#[cfg(test)]
-mod test {
-
-    #[tokio::test]
-    async fn test1() {}
+    Ok(user_id)
 }

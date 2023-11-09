@@ -1,7 +1,9 @@
 use crate::{
     appstate::AppState,
     module::db::{self, prelude::*},
-    module::order::{DelOrder, OrderOp, OrderStatus, OrderUserSchema, SaveOrder, UpdateOrder},
+    module::order::{
+        DelOrder, OrderOp, OrderStatus, OrderUserSchema, SaveOrder, SubmitOrder, UpdateOrder,
+    },
     utils::{auth::JWTAuthMiddleware, error::BaseError},
 };
 use axum::{
@@ -28,21 +30,49 @@ pub fn router() -> Router<Arc<AppState>> {
 async fn submit(
     Extension(auth): Extension<JWTAuthMiddleware>,
     State(state): State<Arc<AppState>>,
-    Json(schema): Json<SaveOrder>,
+    Json(schema): Json<SubmitOrder>,
 ) -> Result<impl IntoResponse, BaseError<String>> {
-    if !OrderOp::hasClash::<String>(
-        schema.apt_start,
-        schema.apt_end,
-        schema.court_id.unwrap_or(Uuid::nil()),
-        &state,
-    )
-    .await?
+    if !OrderOp::hasClash::<String>(schema.apt_start, schema.apt_end, schema.court_id, &state)
+        .await?
     {
-        let id = OrderOp::orderSave::<String>(auth.user.user_id, schema, &state).await?;
+        let court = Courts::find_by_id(schema.court_id)
+            .one(&state.db)
+            .await
+            .map_err(|err| {
+                let id = Uuid::new_v4();
+                error!("{} >>>> {}", id, err.to_string());
+                BaseError::ServerInnerErr::<String>(id)
+            })?
+            .unwrap();
+
+        let cost =
+            (schema.apt_end - schema.apt_start).num_minutes() as f64 / 60.0 * court.price_per_hour;
+        let order = OrderOp::orderSave::<String>(
+            auth.user.user_id,
+            SaveOrder {
+                order_id: None,
+                court_id: Some(schema.court_id),
+                apt_start: schema.apt_start,
+                apt_end: schema.apt_end,
+                cost,
+            },
+            &state,
+        )
+        .await?;
+        let order = OrderUserSchema {
+            order_id: order.order_id,
+            court_id: order.court_id,
+            court_name: court.court_name,
+            create_time: order.create_time,
+            apt_start: order.apt_start,
+            apt_end: order.apt_end,
+            cost,
+        };
+
         Ok(Json(json!({
             "code":0,
             "msg":"预定成功",
-            "order_id":id
+            "order":order
         })))
     } else {
         Err(BaseError::BadRequest(-1, "时间段冲突".to_string()))
@@ -52,7 +82,7 @@ async fn submit(
 async fn all(
     Extension(auth): Extension<JWTAuthMiddleware>,
     State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, BaseError<()>> {
+) -> Result<impl IntoResponse, BaseError<String>> {
     let data = Orders::find()
         .filter(db::orders::Column::UserId.eq(auth.user.user_id))
         .join(
@@ -66,7 +96,7 @@ async fn all(
         .map_err(|err| {
             let id = Uuid::new_v4();
             error!("{} >>>> {}", id, err.to_string());
-            BaseError::ServerInnerErr(id)
+            BaseError::ServerInnerErr::<String>(id)
         })?;
     Ok(Json(json!({
         "code":0,
@@ -112,20 +142,38 @@ async fn update(
     if OrderOp::orderStatus(schema.order_id, auth.user.user_id, &state).await?
         == OrderStatus::Waiting
     {
-        let id = OrderOp::orderSave::<String>(
+        let price = Courts::find()
+            .join_rev(
+                sea_orm::JoinType::InnerJoin,
+                db::orders::Relation::Courts.def(),
+            )
+            .filter(db::orders::Column::OrderId.eq(schema.order_id))
+            .one(&state.db)
+            .await
+            .map_err(|err| {
+                let id = Uuid::new_v4();
+                error!("{} >>>> {}", id, err.to_string());
+                BaseError::ServerInnerErr::<String>(id)
+            })?
+            .unwrap()
+            .price_per_hour;
+
+        let order = OrderOp::orderSave::<String>(
             auth.user.user_id,
             SaveOrder {
                 order_id: Some(schema.order_id),
                 court_id: None,
                 apt_start: schema.apt_start,
                 apt_end: schema.apt_end,
+                cost: (schema.apt_end - schema.apt_start).num_minutes() as f64 / 60.0 * price,
             },
             &state,
         )
         .await?;
         Ok(Json(json!({
             "code":0,
-            "msg":format!("订单({})已修改",id)
+            "msg":"订单已修改",
+            "order":order
         })))
     } else {
         Err(BaseError::BadRequest(-1, "订单已完成或正在进行, 无法修改").into())

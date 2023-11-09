@@ -40,10 +40,10 @@ async fn login(
         })?
         .ok_or(BaseError::BadRequest(-1, "用户不存在"))?;
     debug!("校验密码");
-    passwd::passwd_verify(&schema.pwd, &user_schema.user_pwd)?;
+    passwd::verify_password(&schema.pwd, &user_schema.user_pwd)?;
     //生成access_token
     debug!("生成token");
-    let access_token_details = token::jwt_token_gen(
+    let access_token = token::create(
         user_schema.user_id,
         state.cfg.tokencfg.access_token_ttl,
         &state.cfg.tokencfg.access_prikey,
@@ -57,7 +57,7 @@ async fn login(
     //设置cookie
     let access_cookie = Cookie::build(
         "access_token",
-        access_token_details.token.clone().unwrap_or_default(),
+        &access_token,
     )
     .path("/")
     .max_age(time::Duration::minutes(
@@ -71,7 +71,7 @@ async fn login(
         json!({
             "code": 0,
             "msg":"登录成功",
-            "access_token":  access_token_details.token.unwrap(),
+            "data":{"access_token":&access_token}
         })
         .to_string(),
     );

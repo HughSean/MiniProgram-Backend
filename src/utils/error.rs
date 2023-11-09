@@ -5,28 +5,29 @@ use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum BaseError<T> {
-    BadRequest(i8, T),
+    BadRequest(i32, T),
     ServerInnerErr(Uuid),
 }
 
-impl<T: serde::Serialize> IntoResponse for BaseError<T> {
+impl<T: serde::Serialize + ToString> IntoResponse for BaseError<T> {
     fn into_response(self) -> axum::response::Response {
-        warn!("操作失败");
         match self {
-            BaseError::BadRequest(code, err) => (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "code":code,
-                    "msg":err
-                })),
-            )
-                .into_response(),
+            BaseError::BadRequest(code, err) => {
+                warn!("操作失败: {}", err.to_string());
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "code":code,
+                        "msg":err
+                    })),
+                )
+                    .into_response()
+            }
             BaseError::ServerInnerErr(id) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
                     "code":-1,
-                    "msg":"服务器内部错误",
-                    "error_code":id
+                    "msg":format!("服务器内部错误, 错误代码{}", id.to_string()),
                 })),
             )
                 .into_response(),
@@ -34,11 +35,17 @@ impl<T: serde::Serialize> IntoResponse for BaseError<T> {
     }
 }
 
-impl From<BaseError<&'static str>> for BaseError<String> {
-    fn from(value: BaseError<&'static str>) -> Self {
-        match value {
-            BaseError::BadRequest(code, msg) => Self::BadRequest(code, msg.into()),
-            BaseError::ServerInnerErr(id) => Self::ServerInnerErr(id),
+macro_rules! impl_from {
+    ($T:ty, $U:ty) => {
+        impl From<BaseError<$T>> for BaseError<$U> {
+            fn from(value: BaseError<$T>) -> Self {
+                match value {
+                    BaseError::BadRequest(code, msg) => Self::BadRequest(code, msg.into()),
+                    BaseError::ServerInnerErr(id) => Self::ServerInnerErr(id),
+                }
+            }
         }
-    }
+    };
 }
+
+impl_from!(&'static str, String);

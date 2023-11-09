@@ -7,11 +7,11 @@ use sea_orm::{EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, sea_orm::FromQueryResult)]
 pub struct UserSchema {
     pub user_id: Uuid,
-    pub name: String,
-    pub pwd: String,
+    pub user_name: String,
+    // pub pwd: String,
     pub phone: String,
     pub is_admin: bool,
 }
@@ -36,7 +36,7 @@ impl UserOP {
         schema: UserRegisterSchema,
         state: &AppState,
     ) -> Result<Uuid, BaseError<T>> {
-        let password_hash = passwd::passwd_encode(&schema.pwd)?;
+        let password_hash = passwd::hash_password(&schema.pwd)?;
         let id = Users::insert(db::users::ActiveModel {
             user_name: Set(schema.name),
             user_pwd: Set(password_hash),

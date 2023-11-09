@@ -3,7 +3,7 @@ use crate::utils::error::BaseError;
 use crate::{appstate::AppState, module::db::orders};
 use sea_orm::prelude::DateTime;
 use sea_orm::ActiveValue::NotSet;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TryIntoModel};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
@@ -21,7 +21,7 @@ impl OrderOp {
         user_id: Uuid,
         order: SaveOrder,
         state: &AppState,
-    ) -> Result<Uuid, BaseError<T>> {
+    ) -> Result<db::orders::Model, BaseError<T>> {
         Ok(orders::ActiveModel {
             order_id: order
                 .order_id
@@ -36,6 +36,7 @@ impl OrderOp {
                 .unwrap(),
             apt_start: Set(order.apt_start),
             apt_end: Set(order.apt_end),
+            cost: Set(order.cost),
             ..Default::default()
         }
         .save(&state.db)
@@ -45,8 +46,12 @@ impl OrderOp {
             error!("{} >>>> {}", id, err.to_string());
             BaseError::ServerInnerErr(id)
         })?
-        .order_id
-        .unwrap())
+        .try_into_model()
+        .map_err(|err| {
+            let id = Uuid::new_v4();
+            error!("{} >>>> {}", id, err.to_string());
+            BaseError::ServerInnerErr(id)
+        })?)
     }
 
     pub async fn hasClash<T>(
@@ -116,6 +121,7 @@ pub struct OrderAdminSchema {
     pub create_time: DateTime,
     pub apt_start: DateTime,
     pub apt_end: DateTime,
+    pub cost: f64,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, sea_orm::FromQueryResult)]
@@ -126,6 +132,7 @@ pub struct OrderUserSchema {
     pub create_time: DateTime,
     pub apt_start: DateTime,
     pub apt_end: DateTime,
+    pub cost: f64,
 }
 //update/insert
 #[derive(Debug, Deserialize, Clone)]
@@ -134,19 +141,29 @@ pub struct SaveOrder {
     pub court_id: Option<Uuid>,
     pub apt_start: DateTime,
     pub apt_end: DateTime,
+    pub cost: f64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct GetOrderOfCourt {
+pub struct SubmitOrder {
     pub court_id: Uuid,
+    pub apt_start: DateTime,
+    pub apt_end: DateTime,
 }
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct DelOrder {
     pub order_id: Uuid,
 }
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct UpdateOrder {
     pub order_id: Uuid,
     pub apt_start: DateTime,
     pub apt_end: DateTime,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct OrdersOfCourt {
+    pub court_id: Uuid,
 }

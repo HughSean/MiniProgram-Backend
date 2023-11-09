@@ -1,28 +1,31 @@
+use std::sync::Arc;
+
 use crate::{
     appstate::AppState,
     module::{
         db::{courts, orders, prelude::*, users},
-        order::OrderAdminSchema,
+        order::{OrderAdminSchema, OrdersOfCourt},
     },
     utils::{auth::JWTAuthMiddleware, error::BaseError},
 };
-use axum::{
-    extract::{Path, State},
-    response::IntoResponse,
-    Extension, Json,
-};
+use axum::{extract::State, response::IntoResponse, routing::post, Extension, Json, Router};
 use sea_orm::{ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait};
 use serde_json::json;
-use tracing::error;
+use tracing::{error, info};
 use uuid::Uuid;
 
-async fn ordersOfcourt<T>(
-    State(state): State<AppState>,
-    Path(court_id): Path<uuid::Uuid>,
+pub fn router() -> Router<Arc<AppState>> {
+    info!("/order/* 挂载中");
+    Router::new().route("/orders_of_court", post(ordersOfcourt))
+}
+
+async fn ordersOfcourt(
     Extension(auth): Extension<JWTAuthMiddleware>,
-) -> Result<impl IntoResponse, BaseError<T>> {
+    State(state): State<Arc<AppState>>,
+    Json(schema): Json<OrdersOfCourt>,
+) -> Result<impl IntoResponse, BaseError<String>> {
     let orders = Orders::find()
-        .filter(orders::Column::CourtId.eq(court_id))
+        .filter(orders::Column::CourtId.eq(schema.court_id))
         .join(JoinType::InnerJoin, orders::Relation::Users.def())
         .filter(users::Column::UserId.eq(auth.user.user_id))
         .column_as(users::Column::UserName, "user_name")
@@ -34,7 +37,7 @@ async fn ordersOfcourt<T>(
         .map_err(|err| {
             let id = Uuid::new_v4();
             error!("{} >>>> {}", id, err.to_string());
-            BaseError::ServerInnerErr(id)
+            BaseError::ServerInnerErr::<String>(id)
         })?;
 
     Ok(Json(json!({
