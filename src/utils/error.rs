@@ -4,15 +4,15 @@ use tracing::warn;
 use uuid::Uuid;
 
 #[derive(Debug)]
-pub enum BaseError<T> {
+pub enum HandleErr<T> {
     BadRequest(i32, T),
     ServerInnerErr(Uuid),
 }
 
-impl<T: serde::Serialize + ToString> IntoResponse for BaseError<T> {
+impl<T: serde::Serialize + ToString> IntoResponse for HandleErr<T> {
     fn into_response(self) -> axum::response::Response {
         match self {
-            BaseError::BadRequest(code, err) => {
+            HandleErr::BadRequest(code, err) => {
                 warn!("操作失败: {}", err.to_string());
                 (
                     StatusCode::BAD_REQUEST,
@@ -23,7 +23,7 @@ impl<T: serde::Serialize + ToString> IntoResponse for BaseError<T> {
                 )
                     .into_response()
             }
-            BaseError::ServerInnerErr(id) => (
+            HandleErr::ServerInnerErr(id) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
                     "code":-1,
@@ -37,15 +37,15 @@ impl<T: serde::Serialize + ToString> IntoResponse for BaseError<T> {
 
 macro_rules! impl_from {
     ($T:ty, $U:ty) => {
-        impl From<BaseError<$T>> for BaseError<$U> {
-            fn from(value: BaseError<$T>) -> Self {
-                match value {
-                    BaseError::BadRequest(code, msg) => Self::BadRequest(code, msg.into()),
-                    BaseError::ServerInnerErr(id) => Self::ServerInnerErr(id),
+        impl Into<HandleErr<$T>> for HandleErr<$U> {
+            fn into(self) -> HandleErr<$T> {
+                match self {
+                    HandleErr::BadRequest(code, msg) => HandleErr::BadRequest(code, msg.into()),
+                    HandleErr::ServerInnerErr(id) => HandleErr::ServerInnerErr(id),
                 }
             }
         }
     };
 }
 
-impl_from!(&'static str, String);
+impl_from!(String, &'static str);

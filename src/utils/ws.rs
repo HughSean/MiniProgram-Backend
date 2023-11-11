@@ -5,6 +5,7 @@ pub enum Table {
     Order,
     Court,
 }
+
 #[derive(Clone, Debug)]
 pub enum Event {
     Update,

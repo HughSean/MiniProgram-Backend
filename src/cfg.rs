@@ -27,17 +27,7 @@ pub struct ServerCfg {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct TokenCfg {
-    // pub refresh_token_ttl: i64,
     pub access_token_ttl: i64,
-
     pub access_prikey: String,
     pub access_pubkey: String,
-    // pub refresh_prikey: String,
-    // pub refresh_pubkey: String,
 }
-
-// #[derive(Debug, Deserialize, Clone)]
-// pub struct Security {
-//     // pub salt_string: String,
-
-// }

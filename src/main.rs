@@ -1,13 +1,13 @@
 #![allow(non_snake_case)]
+use axum::{http::StatusCode, Router, Server};
+use std::sync::Arc;
+use tokio::sync;
+use tracing::{info, warn};
 mod api;
 mod appstate;
 mod cfg;
 mod module;
 mod utils;
-use axum::{http::StatusCode, Router, Server};
-use std::sync::Arc;
-use tokio::sync;
-use tracing::{info, warn};
 
 mod App {
     pub type Result<T> = anyhow::Result<T>;
@@ -51,6 +51,7 @@ async fn main() {
         .await
         .unwrap();
 }
+
 //失败路由
 async fn fallback(uri: axum::http::Uri) -> (StatusCode, String) {
     warn!("fallback {}", uri);

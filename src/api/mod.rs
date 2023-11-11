@@ -1,14 +1,12 @@
-use std::sync::Arc;
-
-use axum::Router;
-use tracing::info;
-
 use crate::appstate::AppState;
-
+use axum::Router;
+use std::sync::Arc;
+use tracing::info;
 pub mod admin;
 pub mod open;
 pub mod test;
 pub mod user;
+
 pub fn router(state: Arc<AppState>) -> Router<std::sync::Arc<crate::appstate::AppState>> {
     info!("/api/* 挂载中");
     Router::new()

@@ -1,8 +1,5 @@
-use super::{error::BaseError, token};
-use crate::{
-    appstate::AppState,
-    module::{db::prelude::Users, user::UserSchema},
-};
+use std::sync::Arc;
+
 use axum::{
     extract::State,
     http::{header, Request},
@@ -12,9 +9,15 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+use crate::{
+    appstate::AppState,
+    module::{db::prelude::Users, user::UserSchema},
+};
+
+use super::{error::HandleErr, token};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JWTAuthMiddleware {
@@ -27,7 +30,7 @@ pub async fn auth<B>(
     State(state): State<Arc<AppState>>,
     mut req: Request<B>,
     next: Next<B>,
-) -> Result<impl IntoResponse, BaseError<&'static str>> {
+) -> Result<impl IntoResponse, HandleErr<&'static str>> {
     debug!("提取token");
     //从cookie或者头部取得token
     let access_token = cookie_jar
@@ -40,7 +43,7 @@ pub async fn auth<B>(
             .and_then(|auth_value| auth_value.strip_prefix("Bearer ").map(|e| e.to_string())))
         .ok_or_else(|| {
             warn!("未发现token");
-            BaseError::BadRequest(401, "需要koen")
+            HandleErr::BadRequest(401, "需要koen")
         })?;
 
     debug!("正在验证token");
@@ -48,7 +51,7 @@ pub async fn auth<B>(
     let user_id =
         token::verify(&access_token, &state.cfg.tokencfg.access_pubkey).map_err(|err| {
             warn!("token 验证错误: {}", err.to_string());
-            BaseError::BadRequest(401, "无效token")
+            HandleErr::BadRequest(401, "无效token")
         })?;
 
     debug!("查询用户({})信息", user_id.to_string());
@@ -60,11 +63,11 @@ pub async fn auth<B>(
         .await
         .map_err(|err| {
             error!("id({}): {}", id, err.to_string());
-            BaseError::ServerInnerErr(id)
+            HandleErr::ServerInnerErr(id)
         })?
         .ok_or_else(|| {
             warn!("token所属用户不存在");
-            BaseError::BadRequest(401, "用户不存在")
+            HandleErr::BadRequest(401, "用户不存在")
         })?;
 
     let user = UserSchema {
@@ -84,11 +87,11 @@ pub async fn admin_auth<B>(
     Extension(auth): Extension<JWTAuthMiddleware>,
     req: Request<B>,
     next: Next<B>,
-) -> Result<impl IntoResponse, BaseError<&'static str>> {
+) -> Result<impl IntoResponse, HandleErr<&'static str>> {
     if auth.user.is_admin {
         Ok(next.run(req).await)
     } else {
         warn!("用户({})被拒绝访问 /admin/*", auth.user.user_name);
-        Err(BaseError::BadRequest(401, "权限不足"))
+        Err(HandleErr::BadRequest(401, "权限不足"))
     }
 }

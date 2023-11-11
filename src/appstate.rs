@@ -1,5 +1,6 @@
-use crate::{cfg::Cfg, utils::ws::Msg};
 use std::sync::Arc;
+
+use crate::{cfg::Cfg, utils::ws::Msg};
 
 #[derive(Clone, Debug)]
 pub struct AppState {
@@ -18,7 +19,7 @@ impl AppState {
                 .await
                 .unwrap(),
             cfg,
-            sender
+            sender,
         })
     }
 }

@@ -13,6 +13,8 @@ pub struct Model {
     pub location: String,
     #[sea_orm(column_type = "Double")]
     pub price_per_hour: f64,
+    pub open_time: Time,
+    pub close_time: Time,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

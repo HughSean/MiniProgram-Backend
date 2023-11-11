@@ -1,12 +1,13 @@
 use super::db::{self, prelude::Users};
 use crate::{
     appstate::AppState,
-    utils::{error::BaseError, passwd},
+    utils::{error::HandleErr, passwd},
 };
 use sea_orm::{EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
+
 #[derive(Debug, Deserialize, Serialize, Clone, sea_orm::FromQueryResult)]
 pub struct UserSchema {
     pub user_id: Uuid,
@@ -31,11 +32,12 @@ pub struct UserLoginSchema {
 }
 
 pub struct UserOP;
+
 impl UserOP {
     pub async fn register_new_user<T>(
         schema: UserRegisterSchema,
         state: &AppState,
-    ) -> Result<Uuid, BaseError<T>> {
+    ) -> Result<Uuid, HandleErr<T>> {
         let password_hash = passwd::hash_password(&schema.pwd)?;
         let id = Users::insert(db::users::ActiveModel {
             user_name: Set(schema.name),
@@ -49,7 +51,7 @@ impl UserOP {
         .map_err(|err| {
             let id = Uuid::new_v4();
             error!("{} >>>> {}", id, err.to_string());
-            BaseError::ServerInnerErr(id)
+            HandleErr::ServerInnerErr(id)
         })?
         .last_insert_id;
         Ok(id)

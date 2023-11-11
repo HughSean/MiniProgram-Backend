@@ -5,40 +5,40 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-anyhow = "1.0.75"
+anyhow = "1"
 # web
-axum = "0.6.20"
-axum-extra = { version = "0.8.0", features = ["cookie"] }
-tower = { version = "0.4.13", features = ["tokio"] }
-tower-http = { version = "0.4.4", features = ["auth", "uuid", "limit"] }
+axum = "0.6"
+axum-extra = { version = "0.8", features = ["cookie"] }
+tower = { version = "0.4", features = ["tokio"] }
+tower-http = { version = "0.4", features = ["auth", "uuid", "limit"] }
 # 日志
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.17", features = [
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [
     "env-filter",
     "time",
     "local-time",
 ] }
 # 日期处理库
-chrono = { version = "0.4.31", features = ["serde"] }
-time = "0.3.30"
+chrono = { version = "0.4", features = ["serde"] }
+time = "0.3"
 # serialize & deserialize
-serde = { version = "1.0.190", features = ["derive"] }
-serde_json = "1.0.107"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 # SQL
-sea-orm = { version = "0.12.4", features = [
+sea-orm = { version = "0.12", features = [
     "runtime-tokio",
     "sqlx-postgres",
     "sqlx",
 ] }
-sqlx = { version = "0.7.2", features = ["runtime-tokio"] }
+sqlx = { version = "0.7", features = ["runtime-tokio"] }
 # 异步运行时
-tokio = { version = "1.33.0", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
 #
-toml = "0.8.8"
+toml = "0.8"
 # 数据处理
-jsonwebtoken = "9.1.0"
-pbkdf2 = { version = "0.12.2", features = ["password-hash", "simple"] }
-uuid = { version = "1.5.0", features = ["v4", "serde"] }
-rand_core = { version = "0.6.4", features = ["std"] }
+jsonwebtoken = "9.1"
+pbkdf2 = { version = "0.12", features = ["password-hash", "simple"] }
+uuid = { version = "1.5", features = ["v4", "serde"] }
+rand_core = { version = "0.6", features = ["std"] }
 # 邮箱验证
 # lettre = { version = "0.11.1", features = ["tokio1"] }

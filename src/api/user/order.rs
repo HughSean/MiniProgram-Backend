@@ -1,11 +1,5 @@
-use crate::{
-    appstate::AppState,
-    module::db::{self, prelude::*},
-    module::order::{
-        DelOrder, OrderOp, OrderStatus, OrderUserSchema, SaveOrder, SubmitOrder, UpdateOrder,
-    },
-    utils::{auth::JWTAuthMiddleware, error::BaseError},
-};
+use std::sync::Arc;
+
 use axum::{
     extract::State,
     response::IntoResponse,
@@ -14,9 +8,17 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, RelationTrait};
 use serde_json::json;
-use std::sync::Arc;
 use tracing::{error, info};
 use uuid::Uuid;
+
+use crate::{
+    appstate::AppState,
+    module::db::{self, prelude::*},
+    module::order::{
+        DelOrder, OrderOp, OrderStatus, OrderUserSchema, SaveOrder, SubmitOrder, UpdateOrder,
+    },
+    utils::{auth::JWTAuthMiddleware, error::HandleErr},
+};
 
 pub fn router() -> Router<Arc<AppState>> {
     info!("/order/* 挂载中");
@@ -31,9 +33,16 @@ async fn submit(
     Extension(auth): Extension<JWTAuthMiddleware>,
     State(state): State<Arc<AppState>>,
     Json(schema): Json<SubmitOrder>,
-) -> Result<impl IntoResponse, BaseError<String>> {
-    if !OrderOp::hasClash::<String>(schema.apt_start, schema.apt_end, schema.court_id, &state)
-        .await?
+) -> Result<impl IntoResponse, HandleErr<String>> {
+    if !OrderOp::hasClash(
+        schema.apt_start,
+        schema.apt_end,
+        None,
+        schema.court_id,
+        &state,
+    )
+    .await
+    .map_err(|err| err.into())?
     {
         let court = Courts::find_by_id(schema.court_id)
             .one(&state.db)
@@ -41,13 +50,13 @@ async fn submit(
             .map_err(|err| {
                 let id = Uuid::new_v4();
                 error!("{} >>>> {}", id, err.to_string());
-                BaseError::ServerInnerErr::<String>(id)
+                HandleErr::ServerInnerErr(id)
             })?
             .unwrap();
 
         let cost =
             (schema.apt_end - schema.apt_start).num_minutes() as f64 / 60.0 * court.price_per_hour;
-        let order = OrderOp::orderSave::<String>(
+        let order = OrderOp::save(
             auth.user.user_id,
             SaveOrder {
                 order_id: None,
@@ -72,18 +81,18 @@ async fn submit(
         Ok(Json(json!({
             "code":0,
             "msg":"预定成功",
-            "order":order
+            "data":order
         })))
     } else {
-        Err(BaseError::BadRequest(-1, "时间段冲突".to_string()))
+        Err(HandleErr::BadRequest(-1, "时间冲突".to_string()))
     }
 }
 
 async fn all(
     Extension(auth): Extension<JWTAuthMiddleware>,
     State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, BaseError<String>> {
-    let data = Orders::find()
+) -> Result<impl IntoResponse, HandleErr<String>> {
+    let orders = Orders::find()
         .filter(db::orders::Column::UserId.eq(auth.user.user_id))
         .join(
             sea_orm::JoinType::InnerJoin,
@@ -96,12 +105,12 @@ async fn all(
         .map_err(|err| {
             let id = Uuid::new_v4();
             error!("{} >>>> {}", id, err.to_string());
-            BaseError::ServerInnerErr::<String>(id)
+            HandleErr::ServerInnerErr(id)
         })?;
     Ok(Json(json!({
         "code":0,
         "msg":"查询成功",
-        "data":data
+        "data":orders
     })))
 }
 
@@ -109,23 +118,22 @@ async fn del(
     Extension(auth): Extension<JWTAuthMiddleware>,
     State(state): State<Arc<AppState>>,
     Json(schema): Json<DelOrder>,
-) -> Result<impl IntoResponse, BaseError<&'static str>> {
+) -> Result<impl IntoResponse, HandleErr<&'static str>> {
     if OrderStatus::Done == OrderOp::orderStatus(schema.order_id, auth.user.user_id, &state).await?
     {
-        return Err(BaseError::BadRequest(-1, "当前订单已完成"));
+        return Err(HandleErr::BadRequest(-1, "当前订单已完成"));
     }
-    if Orders::delete_by_id(schema.order_id)
+    let rows_affected = Orders::delete_by_id(schema.order_id)
         .exec(&state.db)
         .await
         .map_err(|err| {
             let id = Uuid::new_v4();
             error!("{} >>>> {}", id, err.to_string());
-            BaseError::ServerInnerErr(id)
+            HandleErr::ServerInnerErr(id)
         })?
-        .rows_affected
-        == 0
-    {
-        Err(BaseError::BadRequest(-1, "没有数据行被删除"))
+        .rows_affected;
+    if rows_affected == 0 {
+        Err(HandleErr::BadRequest(-1, "没有数据行被删除"))
     } else {
         Ok(Json(json!({
             "code":0,
@@ -138,9 +146,31 @@ async fn update(
     Extension(auth): Extension<JWTAuthMiddleware>,
     State(state): State<Arc<AppState>>,
     Json(schema): Json<UpdateOrder>,
-) -> Result<impl IntoResponse, BaseError<String>> {
-    if OrderOp::orderStatus(schema.order_id, auth.user.user_id, &state).await?
+) -> Result<impl IntoResponse, HandleErr<String>> {
+    let court_id = Orders::find_by_id(schema.order_id)
+        .one(&state.db)
+        .await
+        .map_err(|err| {
+            let id = Uuid::new_v4();
+            error!("{} >>>> {}", id, err.to_string());
+            HandleErr::ServerInnerErr(id)
+        })?
+        .ok_or(HandleErr::BadRequest(-1, "order_id无效").into())?
+        .court_id;
+
+    if OrderOp::orderStatus(schema.order_id, auth.user.user_id, &state)
+        .await
+        .map_err(|err| err.into())?
         == OrderStatus::Waiting
+        && !OrderOp::hasClash(
+            schema.apt_start,
+            schema.apt_end,
+            Some(schema.order_id),
+            court_id,
+            &state,
+        )
+        .await
+        .map_err(|err| err.into())?
     {
         let price = Courts::find()
             .join_rev(
@@ -153,12 +183,12 @@ async fn update(
             .map_err(|err| {
                 let id = Uuid::new_v4();
                 error!("{} >>>> {}", id, err.to_string());
-                BaseError::ServerInnerErr::<String>(id)
+                HandleErr::ServerInnerErr(id)
             })?
             .unwrap()
             .price_per_hour;
 
-        let order = OrderOp::orderSave::<String>(
+        let order = OrderOp::save(
             auth.user.user_id,
             SaveOrder {
                 order_id: Some(schema.order_id),
@@ -173,9 +203,9 @@ async fn update(
         Ok(Json(json!({
             "code":0,
             "msg":"订单已修改",
-            "order":order
+            "data":order
         })))
     } else {
-        Err(BaseError::BadRequest(-1, "订单已完成或正在进行, 无法修改").into())
+        Err(HandleErr::BadRequest(-1, "无法修改").into())
     }
 }

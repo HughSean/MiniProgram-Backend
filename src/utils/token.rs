@@ -1,23 +1,19 @@
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
+
 // use redis::AsyncCommands;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenClaims {
-    pub sub: String,            //用户标识
-    pub token_uuid: uuid::Uuid, //
-    pub exp: i64,               //过期时间
-    pub iat: i64,               //发布时间
-    pub nbf: i64,               //生效时间
-}
-
-#[deprecated]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TokenWrap {
-    pub token: Option<String>,   //TokenClaims的JWT
-    pub token_uuid: uuid::Uuid,  //token的uuid
-    pub user_id: uuid::Uuid,     //token所属用户的uuid
-    pub expires_in: Option<i64>, //过期时间戳
+    pub sub: String,
+    //用户标识
+    pub token_uuid: uuid::Uuid,
+    //
+    pub exp: i64,
+    //过期时间
+    pub iat: i64,
+    //发布时间
+    pub nbf: i64, //生效时间
 }
 
 pub fn create(
