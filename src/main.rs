@@ -1,12 +1,13 @@
 #![allow(non_snake_case)]
+use axum::{http::StatusCode, Router, Server};
+use std::sync::Arc;
+use tokio::sync;
+use tracing::{info, warn};
 mod api;
 mod appstate;
 mod cfg;
 mod module;
 mod utils;
-use axum::{http::StatusCode, response::IntoResponse, Router, Server};
-use std::sync::Arc;
-use tracing::{info, warn};
 
 mod App {
     pub type Result<T> = anyhow::Result<T>;
@@ -18,11 +19,21 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_line_number(true)
         .with_env_filter("backend=debug")
+        // .with_max_level(Level::DEBUG)
+        .with_timer(tracing_subscriber::fmt::time::LocalTime::new(
+            time::macros::format_description!("[year]-[month]-[day] ([hour]:[minute]:[second])"),
+        ))
         .init();
-    //获取配置文件
+    //配置
+
+    let (sender, _) = sync::broadcast::channel(100);
     let cfg = cfg::parse().await.unwrap();
     let addrstr = format!("{}:{}", cfg.servercfg.ip, cfg.servercfg.port);
-    let state = Arc::new(appstate::AppState::new(cfg).await.unwrap());
+    let state = Arc::new(
+        appstate::AppState::new(cfg, Arc::new(sender))
+            .await
+            .unwrap(),
+    );
     //挂载路由
     let approuter = api::router(state.clone())
         .with_state(state.clone())
@@ -40,7 +51,9 @@ async fn main() {
         .await
         .unwrap();
 }
-//默认失败路由
-async fn fallback() -> impl IntoResponse {
-    (StatusCode::BAD_GATEWAY, "not found")
+
+//失败路由
+async fn fallback(uri: axum::http::Uri) -> (StatusCode, String) {
+    warn!("fallback {}", uri);
+    (StatusCode::NOT_FOUND, format!("No route for {}", uri))
 }
