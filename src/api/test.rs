@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use axum::{
     http::StatusCode, middleware, response::IntoResponse, routing::get, Extension, Json, Router,
 };
 use serde_json::json;
-
+use std::sync::Arc;
 pub fn router(state: Arc<crate::appstate::AppState>) -> Router {
     Router::new()
         .nest("/test", Router::new().route("/auth_test", get(auth_test)))

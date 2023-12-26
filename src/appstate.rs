@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::{cfg::Cfg, utils::ws::Msg};
-
+use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct AppState {
     pub db: sea_orm::DatabaseConnection,

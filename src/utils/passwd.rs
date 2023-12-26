@@ -1,9 +1,7 @@
+use crate::error::HandleErr;
 use pbkdf2::password_hash::{PasswordVerifier, SaltString};
 use tracing::{error, info};
 use uuid::Uuid;
-
-use super::error::HandleErr;
-
 //密码散列
 pub fn hash_password<T>(pwd: &str) -> Result<String, HandleErr<T>> {
     let salt = SaltString::generate(&mut rand_core::OsRng);
