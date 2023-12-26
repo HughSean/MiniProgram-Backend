@@ -1,19 +1,16 @@
-use std::sync::Arc;
-
+use crate::{
+    appstate::AppState,
+    error::HandleErr,
+    module::{db::prelude::Users, user::UserSchema},
+    utils::auth::JWTAuthMiddleware,
+};
 use axum::{extract::State, response::IntoResponse, routing::get, Extension, Json, Router};
 use sea_orm::EntityTrait;
 use serde_json::json;
+use std::sync::Arc;
 use tracing::{debug, error, info};
-
-use crate::{
-    appstate::AppState,
-    module::{db::prelude::Users, user::UserSchema},
-    utils::{auth::JWTAuthMiddleware, error::HandleErr},
-};
-
 pub mod court;
 pub mod order;
-
 pub fn router() -> Router<Arc<AppState>> {
     info!("/user 挂载中");
     Router::new()

@@ -7,6 +7,7 @@ use uuid::Uuid;
 pub enum HandleErr<T> {
     BadRequest(i32, T),
     ServerInnerErr(Uuid),
+    UnAuthorized,
 }
 
 impl<T: serde::Serialize + ToString> IntoResponse for HandleErr<T> {
@@ -31,21 +32,23 @@ impl<T: serde::Serialize + ToString> IntoResponse for HandleErr<T> {
                 })),
             )
                 .into_response(),
+            HandleErr::UnAuthorized => StatusCode::UNAUTHORIZED.into_response(),
         }
     }
 }
 
-macro_rules! impl_from {
+macro_rules! impl_into {
     ($T:ty, $U:ty) => {
         impl Into<HandleErr<$T>> for HandleErr<$U> {
             fn into(self) -> HandleErr<$T> {
                 match self {
                     HandleErr::BadRequest(code, msg) => HandleErr::BadRequest(code, msg.into()),
                     HandleErr::ServerInnerErr(id) => HandleErr::ServerInnerErr(id),
+                    HandleErr::UnAuthorized => HandleErr::UnAuthorized,
                 }
             }
         }
     };
 }
 
-impl_from!(String, &'static str);
+impl_into!(String, &'static str);

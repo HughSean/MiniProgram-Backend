@@ -1,5 +1,12 @@
-use std::sync::Arc;
-
+use crate::{
+    appstate::AppState,
+    error::HandleErr,
+    module::db::{self, prelude::*},
+    module::order::{
+        DelOrder, OrderOp, OrderStatus, OrderUserSchema, SaveOrder, SubmitOrder, UpdateOrder,
+    },
+    utils::auth::JWTAuthMiddleware,
+};
 use axum::{
     extract::State,
     response::IntoResponse,
@@ -8,18 +15,9 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, RelationTrait};
 use serde_json::json;
+use std::sync::Arc;
 use tracing::{error, info};
 use uuid::Uuid;
-
-use crate::{
-    appstate::AppState,
-    module::db::{self, prelude::*},
-    module::order::{
-        DelOrder, OrderOp, OrderStatus, OrderUserSchema, SaveOrder, SubmitOrder, UpdateOrder,
-    },
-    utils::{auth::JWTAuthMiddleware, error::HandleErr},
-};
-
 pub fn router() -> Router<Arc<AppState>> {
     info!("/order/* 挂载中");
     Router::new()

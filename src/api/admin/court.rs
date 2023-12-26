@@ -1,12 +1,13 @@
 use crate::{
     appstate::AppState,
+    error::HandleErr,
     module::court::{CourtAdd, CourtDel, CourtOp, CourtSave},
     module::{
         court::{CourtAdminSchema, CourtUpdate},
         db,
         db::prelude::{self, Courts},
     },
-    utils::{auth::JWTAuthMiddleware, error::HandleErr},
+    utils::auth::JWTAuthMiddleware,
 };
 use axum::{
     extract::State,
@@ -18,9 +19,8 @@ use prelude::Orders;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
-
 pub fn router() -> Router<Arc<AppState>> {
     info!("/court/* 挂载中");
     Router::new()
@@ -71,6 +71,9 @@ async fn add(
         "admin({})添加球场({})",
         auth.user.user_name, schema.court_name
     );
+
+    debug!("pass court add");
+
     Ok(Json(json!({
         "code":0,
         "msg":"球场添加成功",
@@ -151,6 +154,7 @@ async fn all(
             close_time: e.close_time,
         })
         .collect();
+    debug!("pass court all");
     Ok(Json(json!({
         "code":0,
         "msg":"查询成功",
@@ -191,6 +195,9 @@ async fn update(
         &state,
     )
     .await?;
+
+    debug!("pass court update");
+
     Ok(Json(json!({
         "code":0,
         "msg":"操作成功",

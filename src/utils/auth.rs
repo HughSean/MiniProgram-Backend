@@ -1,35 +1,31 @@
-use std::sync::Arc;
-
+use super::token;
+use crate::{
+    appstate::AppState,
+    error::HandleErr,
+    module::{db::prelude::Users, user::UserSchema},
+};
 use axum::{
-    extract::State,
-    http::{header, Request},
+    extract::{Request, State},
+    http::header,
     middleware::Next,
     response::IntoResponse,
     Extension,
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-
-use crate::{
-    appstate::AppState,
-    module::{db::prelude::Users, user::UserSchema},
-};
-
-use super::{error::HandleErr, token};
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JWTAuthMiddleware {
     pub user: UserSchema,
-    // pub access_token_uuid: uuid::Uuid,
 }
 
-pub async fn auth<B>(
+pub async fn auth(
     cookie_jar: axum_extra::extract::CookieJar,
     State(state): State<Arc<AppState>>,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, HandleErr<&'static str>> {
     debug!("提取token");
     //从cookie或者头部取得token
@@ -43,7 +39,7 @@ pub async fn auth<B>(
             .and_then(|auth_value| auth_value.strip_prefix("Bearer ").map(|e| e.to_string())))
         .ok_or_else(|| {
             warn!("未发现token");
-            HandleErr::BadRequest(401, "需要koen")
+            HandleErr::UnAuthorized
         })?;
 
     debug!("正在验证token");
@@ -51,7 +47,7 @@ pub async fn auth<B>(
     let user_id =
         token::verify(&access_token, &state.cfg.tokencfg.access_pubkey).map_err(|err| {
             warn!("token 验证错误: {}", err.to_string());
-            HandleErr::BadRequest(401, "无效token")
+            HandleErr::UnAuthorized
         })?;
 
     debug!("查询用户({})信息", user_id.to_string());
@@ -67,7 +63,7 @@ pub async fn auth<B>(
         })?
         .ok_or_else(|| {
             warn!("token所属用户不存在");
-            HandleErr::BadRequest(401, "用户不存在")
+            HandleErr::UnAuthorized
         })?;
 
     let user = UserSchema {
@@ -83,10 +79,10 @@ pub async fn auth<B>(
     Ok(next.run(req).await)
 }
 
-pub async fn admin_auth<B>(
+pub async fn admin_auth(
     Extension(auth): Extension<JWTAuthMiddleware>,
-    req: Request<B>,
-    next: Next<B>,
+    req: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, HandleErr<&'static str>> {
     if auth.user.is_admin {
         Ok(next.run(req).await)

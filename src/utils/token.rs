@@ -1,19 +1,17 @@
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
-
-// use redis::AsyncCommands;
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenClaims {
-    pub sub: String,
     //用户标识
-    pub token_uuid: uuid::Uuid,
+    pub sub: String,
     //
-    pub exp: i64,
+    pub token_uuid: uuid::Uuid,
     //过期时间
-    pub iat: i64,
+    pub exp: i64,
     //发布时间
-    pub nbf: i64, //生效时间
+    pub iat: i64,
+    //生效时间
+    pub nbf: i64,
 }
 
 pub fn create(

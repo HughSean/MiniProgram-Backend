@@ -1,7 +1,7 @@
 use crate::{
     appstate::AppState,
+    error::HandleErr,
     module::{court::CourtUserSchema, db::prelude::Courts},
-    utils::error::HandleErr,
 };
 use axum::{extract::State, response::IntoResponse, routing::get, Json, Router};
 use sea_orm::EntityTrait;
@@ -9,7 +9,6 @@ use serde_json::json;
 use std::sync::Arc;
 use tracing::error;
 use uuid::Uuid;
-
 pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/all", get(all))
 }

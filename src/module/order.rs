@@ -1,15 +1,12 @@
+use super::db::prelude::*;
+use crate::error::HandleErr;
+use crate::{appstate::AppState, module::db::orders};
 use sea_orm::prelude::DateTime;
 use sea_orm::ActiveValue::NotSet;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TryIntoModel};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
-
-use crate::utils::error::HandleErr;
-use crate::{appstate::AppState, module::db::orders};
-
-use super::db::prelude::*;
-
 #[derive(PartialEq, Clone, Debug)]
 pub enum OrderStatus {
     Done,
@@ -23,6 +20,7 @@ pub struct OrderAdminSchema {
     pub user_id: Uuid,
     pub court_id: Uuid,
     pub user_name: String,
+    pub user_phone: String,
     pub court_name: String,
     pub create_time: DateTime,
     pub apt_start: DateTime,

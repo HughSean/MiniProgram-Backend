@@ -1,35 +1,37 @@
-use std::sync::Arc;
-
-use axum::{extract::State, response::IntoResponse, routing::post, Extension, Json, Router};
-use sea_orm::{ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait};
-use serde_json::json;
-use tracing::{error, info};
-use uuid::Uuid;
-
 use crate::{
     appstate::AppState,
+    error::HandleErr,
     module::{
         db::{courts, orders, prelude::*, users},
-        order::{OrderAdminSchema, OrdersOfCourt},
+        order::OrderAdminSchema,
     },
-    utils::{auth::JWTAuthMiddleware, error::HandleErr},
 };
-
+use axum::{
+    extract::{Path, State},
+    response::IntoResponse,
+    routing::get,
+    Json, Router,
+};
+use sea_orm::{ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait};
+use serde_json::json;
+use std::sync::Arc;
+use tracing::{debug, error, info};
+use uuid::Uuid;
 pub fn router() -> Router<Arc<AppState>> {
     info!("/order/* 挂载中");
-    Router::new().route("/orders_of_court", post(ordersOfcourt))
+    Router::new().route("/:id", get(ordersOfcourt))
 }
 
 async fn ordersOfcourt(
-    Extension(auth): Extension<JWTAuthMiddleware>,
     State(state): State<Arc<AppState>>,
-    Json(schema): Json<OrdersOfCourt>,
+    Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse, HandleErr<String>> {
+    debug!("into admin order");
     let orders = Orders::find()
-        .filter(orders::Column::CourtId.eq(schema.court_id))
+        .filter(orders::Column::CourtId.eq(id))
         .join(JoinType::InnerJoin, orders::Relation::Users.def())
-        .filter(users::Column::UserId.eq(auth.user.user_id))
         .column_as(users::Column::UserName, "user_name")
+        .column_as(users::Column::Phone, "user_phone")
         .join(JoinType::InnerJoin, orders::Relation::Courts.def())
         .column_as(courts::Column::CourtName, "court_name")
         .into_model::<OrderAdminSchema>()
@@ -40,7 +42,7 @@ async fn ordersOfcourt(
             error!("{} >>>> {}", id, err.to_string());
             HandleErr::ServerInnerErr::<String>(id)
         })?;
-
+    debug!("pass admin order");
     Ok(Json(json!({
         "code":0,
         "msg":"查询成功",

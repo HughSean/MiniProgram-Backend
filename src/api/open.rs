@@ -1,6 +1,6 @@
+use crate::error::HandleErr;
 use crate::module::db;
 use crate::module::user::{UserLoginSchema, UserOP, UserRegisterSchema};
-use crate::utils::error::HandleErr;
 use crate::utils::{passwd, token};
 use crate::{appstate::AppState, module::db::prelude::Users};
 use axum::extract::State;
@@ -14,7 +14,6 @@ use std::sync::Arc;
 use tracing::{debug, warn};
 use tracing::{error, info};
 use uuid::Uuid;
-
 pub fn router() -> Router<Arc<AppState>> {
     info!("/login 挂载中");
     info!("/register 挂载中");
@@ -55,14 +54,13 @@ async fn login(
     })?;
 
     //设置cookie
-    let access_cookie = Cookie::build("access_token", &access_token)
+    let access_cookie = Cookie::build(("access_token", &access_token))
         .path("/")
         .max_age(time::Duration::minutes(
             state.cfg.tokencfg.access_token_ttl * 60,
         ))
         .same_site(SameSite::Lax)
-        .http_only(true)
-        .finish();
+        .http_only(true);
 
     let mut response = Response::new(
         json!({

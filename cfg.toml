@@ -4,7 +4,7 @@ port = 8080
 db_url = "postgres://miniprogram:passwd@localhost/miniprogram"
 
 [tokencfg]
-access_token_ttl = 60
+access_token_ttl = 120
 
 access_prikey = """
 -----BEGIN RSA PRIVATE KEY-----

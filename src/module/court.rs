@@ -1,3 +1,5 @@
+use super::db;
+use crate::{appstate::AppState, error::HandleErr};
 use sea_orm::prelude::Time;
 use sea_orm::{
     ActiveModelTrait,
@@ -7,10 +9,6 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
-
-use crate::{appstate::AppState, utils::error::HandleErr};
-
-use super::db;
 //update/insert
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct CourtSave {

@@ -1,13 +1,9 @@
 use super::db::{self, prelude::Users};
-use crate::{
-    appstate::AppState,
-    utils::{error::HandleErr, passwd},
-};
+use crate::{appstate::AppState, error::HandleErr, utils::passwd};
 use sea_orm::{EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
-
 #[derive(Debug, Deserialize, Serialize, Clone, sea_orm::FromQueryResult)]
 pub struct UserSchema {
     pub user_id: Uuid,

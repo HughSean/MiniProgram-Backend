@@ -7,7 +7,7 @@ pub mod open;
 pub mod test;
 pub mod user;
 
-pub fn router(state: Arc<AppState>) -> Router<std::sync::Arc<crate::appstate::AppState>> {
+pub fn router(state: Arc<AppState>) -> Router<Arc<AppState>> {
     info!("/api/* 挂载中");
     Router::new()
         .nest("/user", user::router())
